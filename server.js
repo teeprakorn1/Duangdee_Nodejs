@@ -65,7 +65,7 @@ if (!fs.existsSync(uploadDir_Hand)) {
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // จำกัดขนาดไฟล์ที่ 2MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // จำกัดขนาดไฟล์ที่ 5MB
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
     if (!allowedTypes.includes(file.mimetype)) {
@@ -408,11 +408,15 @@ app.post('/api/reset-password', async (req, res) => {
   const NewPassword = await bcrypt.hash(Users_Password, saltRounds);
 
   const sql = "UPDATE users SET Users_Password = ? WHERE Users_Email = ?";
-  db.query(sql, [NewPassword,Users_Email], async (err) => {
+  db.query(sql, [NewPassword,Users_Email], async (err , result) => {
     if (err) { return res.status(500).send({ message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์', status: false });}
-      await sendOTPEmail(Users_Email, null , 0);
-      res.send({ message:'รีเซ็ต Password สำเร็จ',status: true });
-  });
+      	if(result.affectedRows > 0){
+		await sendOTPEmail(Users_Email, null , 0);
+      		res.send({ message:'รีเซ็ต Password สำเร็จ',status: true });
+	}else{
+		res.send({ message: "ไม่สามารถอัพเดทข้อมูลได้",status: false });
+	} 
+ });
 });
 
 //////////////////////////////////Google OAuth API///////////////////////////////////////
@@ -754,7 +758,7 @@ app.get('/api/get-profile/:id', VerifyTokens, async (req, res) => {
   }
 
   const sql = "SELECT u.*,g.UsersGender_Name,ut.UsersType_Name,rt.RegisType_Name FROM"+
-  "(((users u INNER JOIN usersgender g ON u.UsersGender_ID = G.UsersGender_ID)"+
+  "(((users u INNER JOIN usersgender g ON u.UsersGender_ID = g.UsersGender_ID)"+
   "INNER JOIN userstype ut ON u.UsersType_ID = ut.UsersType_ID)INNER JOIN"+
   " registype rt ON u.RegisType_ID = rt.RegisType_ID) WHERE Users_ID = ?";
   db.query(sql, [id], (err, results) => {
@@ -830,7 +834,7 @@ app.post('/api/check-zodiac', VerifyTokens, async (req, res) => {
 
   //Astrological Signs
   if ((birthMonth === 4 && birthDay >= 13) || (birthMonth === 5 && birthDay <= 14)) { zodiacData = 'ราศีเมษ'; zodiacNumber = 1;
-  } else if ((birthMonth === 5 && birthDay >= 15) || (birthMonth === 4 && birthDay <= 14)) { zodiacData = 'ราศีพฤษภ'; zodiacNumber = 2;
+  } else if ((birthMonth === 5 && birthDay >= 15) || (birthMonth === 6 && birthDay <= 14)) { zodiacData = 'ราศีพฤษภ'; zodiacNumber = 2;
   } else if ((birthMonth === 6 && birthDay >= 15) || (birthMonth === 7 && birthDay <= 14)) { zodiacData = 'ราศีเมถุน'; zodiacNumber = 3;
   } else if ((birthMonth === 7 && birthDay >= 15) || (birthMonth === 8 && birthDay <= 15)) { zodiacData = 'ราศีกรกฎ'; zodiacNumber = 4;
   } else if ((birthMonth === 8 && birthDay >= 16) || (birthMonth === 9 && birthDay <= 16)) { zodiacData = 'ราศีสิงห์';zodiacNumber = 5;
@@ -1511,7 +1515,7 @@ app.get('/api/get-profile-web', VerifyTokens ,async (req, res) => {
   }
 
   const sql = "SELECT u.*,g.UsersGender_Name,ut.UsersType_Name,rt.RegisType_Name FROM"+
-  "(((users u INNER JOIN usersgender g ON u.UsersGender_ID = G.UsersGender_ID)"+
+  "(((users u INNER JOIN usersgender g ON u.UsersGender_ID = g.UsersGender_ID)"+
   "INNER JOIN userstype ut ON u.UsersType_ID = ut.UsersType_ID)INNER JOIN"+
   " registype rt ON u.RegisType_ID = rt.RegisType_ID)";
   db.query(sql, (err, results) => {
@@ -1529,16 +1533,16 @@ app.get('/api/get-profile-web', VerifyTokens ,async (req, res) => {
 app.put('/api/update-profile-web/:id', VerifyTokens ,async (req, res) => {
   const { id } = req.params;
   let { Users_DisplayName, Users_FirstName, Users_LastName,
-    Users_Phone, Users_BirthDate, UsersGender_ID, Users_IsActive} = req.body;
+    Users_Phone, UsersGender_ID, Users_IsActive} = req.body;
  
   if(!id || typeof id !== 'string'){
     return res.send({ message: "ต้องมี ID", status: false });
   }
 
   if(!Users_DisplayName || !Users_FirstName || !Users_LastName ||
-     !Users_Phone || !Users_BirthDate || !UsersGender_ID || !Users_IsActive ||
+     !Users_Phone || !UsersGender_ID || !Users_IsActive ||
     typeof Users_DisplayName !== "string" || typeof Users_FirstName !== "string" ||
-    typeof Users_LastName !== "string" || typeof Users_BirthDate !== "string" 
+    typeof Users_LastName !== "string" 
   ){
     return res.send({ message: "จำเป็นต้องมีข้อมูล", status: false });
   }
@@ -1558,7 +1562,6 @@ app.put('/api/update-profile-web/:id', VerifyTokens ,async (req, res) => {
   Users_DisplayName = xss(validator.escape(Users_DisplayName))
   Users_FirstName = xss(validator.escape(Users_FirstName))
   Users_LastName = xss(validator.escape(Users_LastName))
-  Users_BirthDate = xss(validator.escape(Users_BirthDate))
   UsersGender_ID = xss(validator.escape(UsersGender_ID))
   Users_IsActive = xss(validator.escape(Users_IsActive))
   Users_Phone = Users_Phone ? xss(validator.escape(Users_Phone)) : Users_Phone;
@@ -1569,16 +1572,16 @@ app.put('/api/update-profile-web/:id', VerifyTokens ,async (req, res) => {
     return res.send({ message: 'คุณไม่สิทธ์ทำรายการนี้', status: false });
   }
  
-  const sql_check_id = "SELECT COUNT(*) AS count FROM Users WHERE Users_ID = ?";
+  const sql_check_id = "SELECT COUNT(*) AS count FROM users WHERE Users_ID = ?";
   db.query(sql_check_id, [id], async (err, result) => {
     if (err) { return res.status(500).send({ message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์', status: false });}
  
     if (result[0].count > 0) {
-      const sql = "UPDATE Users SET Users_DisplayName = ?, Users_FirstName = ?, " +
-      " Users_LastName = ?, Users_Phone = ?, Users_BirthDate = ?, UsersGender_ID = ?, Users_IsActive = ?" +
+      const sql = "UPDATE users SET Users_DisplayName = ?, Users_FirstName = ?, " +
+      " Users_LastName = ?, Users_Phone = ?, UsersGender_ID = ?, Users_IsActive = ?" +
       " WHERE Users_ID = ?";
       db.query(sql, [Users_DisplayName, Users_FirstName ,Users_LastName ,
-        Users_Phone ,Users_BirthDate ,UsersGender_ID , Users_IsActive ,id], async (err, result) => {
+        Users_Phone ,UsersGender_ID , Users_IsActive ,id], async (err, result) => {
         if (err) { return res.status(500).send({ message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์', status: false });}
  
         if(result.affectedRows > 0){
